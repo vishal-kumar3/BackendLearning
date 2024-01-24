@@ -11,9 +11,11 @@ const generateAccessAndRefereshTokens = async(userId) =>{
         const accessToken = await user.generateAccessToken()
         const refreshToken = await user.generateRefreshToken()
 
+        
         user.refreshToken = refreshToken
         await user.save({ validateBeforeSave: false })
-
+        
+        console.log("\n\n\n\naccessToken ",accessToken, "refreshToken ", refreshToken)
         return {accessToken, refreshToken}
 
 
@@ -185,6 +187,10 @@ const refreshAccessToken = asyncHandler( async (req, res) => {
 
     const incomingRefreshtoken = req.cookies?.refreshToken || req.body.refreshToken
 
+    if(!incomingRefreshtoken){
+        throw new ApiError(401, "unauthorised token")
+    }
+
     try {
         const decodedToken = jwt.verify(incomingRefreshtoken, process.env.REFRESH_TOKEN_SECRET)
         
@@ -203,8 +209,9 @@ const refreshAccessToken = asyncHandler( async (req, res) => {
         }
         console.log("user.refreshToken ", user.refreshToken)
 
-        const {newAccessToken, newRefreshToken} = await generateAccessAndRefereshTokens(user._id)
-    
+        const {accessToken, refreshToken} = await generateAccessAndRefereshTokens(user._id)
+        
+        console.log("\n\n\n\n\n\n new walla ",accessToken, " \n\n\nnew walla",refreshToken)
 
         const options = {
             httpOnly: true,
@@ -213,13 +220,13 @@ const refreshAccessToken = asyncHandler( async (req, res) => {
     
         return res
         .status(200)
-        .cookie("accessToken", newAccessToken, options)
-        .cookie("refreshToken", newRefreshToken, options)
+        .cookie("accessToken", accessToken, options)
+        .cookie("refreshToken", refreshToken, options)
         .json(
             new ApiResponse(
                 200,
                 {
-                    newAccessToken, newRefreshToken
+                    accessToken, refreshToken
                 },
                 "Access Token Refreshed"
             )
@@ -230,9 +237,62 @@ const refreshAccessToken = asyncHandler( async (req, res) => {
 
 })
 
+
+const passwordUpdate = asyncHandler(async(req, res) => {
+    
+    const {oldPassword, newPassword} = req.body;
+    
+
+    if(
+        [oldPassword, newPassword].some((field) => field === "")
+    ){
+        throw new ApiError(400, "Current Password And New Password Are Required!!")
+    }
+
+    // if(!(oldPassword.length > 0)){
+    //     throw new ApiError(400, "Current Password Is Required!!")
+    // }
+
+    const user = await User.findById(req.user._id);
+
+    if(!user){
+        throw new ApiError(401, "Unauthorised Access!!")
+    }
+
+    const correctPassword = await user.isPasswordCorrect(oldPassword);
+
+    if(!correctPassword){
+        throw new ApiError(401, "Unauthorised Access!!")
+    }
+
+    // ab yaha tk aye ho to password sahi hi hoga
+    if(oldPassword == newPassword){
+        throw new ApiError(400, "New password cannot be same h old password!!!")
+    }
+
+    user.password = newPassword
+    user.save({validateBeforeSave: false})
+
+
+
+    return res
+        .status(200)
+        .json(
+            new ApiResponse(
+                200,
+                {
+                    newPassword
+                },
+                "Password updated successfully"
+            )
+        )
+
+})
+
 export {
     registerUser,
     loginUser,
     logoutUser,
-    refreshAccessToken
+    refreshAccessToken,
+    passwordUpdate
 }
